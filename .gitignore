@@ -1,0 +1,10 @@
+.env
+venv/
+downloads/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+cookies.txt
+.DS_Store

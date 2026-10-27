@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  reels-bot:
+    build: .
+    container_name: reels-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - DOWNLOAD_DIR=downloads
+      - MAX_FILESIZE_MB=50
+    volumes:
+      - ./downloads:/app/downloads
