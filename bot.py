@@ -125,6 +125,7 @@ async def handle_url_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action=ChatAction.UPLOAD_VIDEO
         )
 
+        video_data = await asyncio.to_thread(download_video, url)
         media_type = video_data.get("type", "video")
         file_path = video_data["file_path"]
         title = video_data.get("title") or f"{platform} Media"
