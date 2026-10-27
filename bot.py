@@ -131,7 +131,9 @@ async def watermark_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             config.WATERMARK_ENABLED = False
             await update.message.reply_text("❌ <b>വാട്ടർമാർക്ക് പ്രവർത്തനരഹിതമാക്കി (Disabled).</b>", parse_mode=ParseMode.HTML)
             return
-        elif sub in ["top_right", "top_left", "bottom_right", "bottom_left"]:
+        elif sub in ["center", "centre", "top_right", "top_left", "bottom_right", "bottom_left"]:
+            if sub == "centre":
+                sub = "center"
             config.WATERMARK_POSITION = sub
             await update.message.reply_text(f"📍 <b>വാട്ടർമാർക്ക് സ്ഥാനം മാറ്റി:</b> <code>{sub}</code>", parse_mode=ParseMode.HTML)
             return
@@ -142,10 +144,11 @@ async def watermark_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• സ്റ്റാറ്റസ്: <b>{status_str}</b>\n"
         f"• സ്ഥാനം: <code>{config.WATERMARK_POSITION}</code>\n"
         f"• സുതാര്യത (Opacity): <b>{int(config.WATERMARK_OPACITY * 100)}%</b>\n"
-        f"• ലോഗോ: <b>Babu Perumana (Transparent)</b>\n\n"
+        f"• ലോഗോ: <b>Babu Perumana (White, Centered)</b>\n\n"
         "<b>കമാൻഡുകൾ:</b>\n"
         "• <code>/watermark on</code> - ഓൺ ചെയ്യാൻ\n"
         "• <code>/watermark off</code> - ഓഫ് ചെയ്യാൻ\n"
+        "• <code>/watermark center</code> (വീഡിയോയുടെ നടുവിൽ - Default)\n"
         "• <code>/watermark top_right</code> (മുകളിൽ വലതുവശം)\n"
         "• <code>/watermark bottom_right</code> (താഴെ വലതുവശം)\n"
         "• <code>/watermark top_left</code> (മുകളിൽ ഇടതുവശം)"

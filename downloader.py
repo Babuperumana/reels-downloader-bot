@@ -214,29 +214,39 @@ def compress_video_if_needed(video_path: str, max_bytes: int = config.MAX_FILESI
     return video_path
 
 def apply_watermark_to_video(video_path: str) -> str:
-    """Overlays transparent watermark logo onto video with automatic relative scaling."""
+    """Overlays transparent watermark logo onto video with exact aspect ratio preservation."""
     if not config.WATERMARK_ENABLED or not config.WATERMARK_FILE.exists():
         return video_path
         
     out_watermarked = str(video_path).replace(".mp4", "_wm.mp4")
     
-    pos = getattr(config, "WATERMARK_POSITION", "top_right").lower()
-    if pos == "top_left":
+    meta = get_media_metadata(video_path)
+    vid_w = meta.get("width") or 720
+    
+    width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.45)
+    wm_w = int(vid_w * width_ratio)
+    if wm_w % 2 != 0:
+        wm_w += 1
+        
+    opacity = getattr(config, "WATERMARK_OPACITY", 0.75)
+    pos = getattr(config, "WATERMARK_POSITION", "center").lower()
+    
+    if pos == "center":
+        overlay_expr = "(main_w-overlay_w)/2:(main_h-overlay_h)/2"
+    elif pos == "top_left":
         overlay_expr = "25:25"
     elif pos == "bottom_right":
         overlay_expr = "main_w-overlay_w-25:main_h-overlay_h-50"
     elif pos == "bottom_left":
         overlay_expr = "25:main_h-overlay_h-50"
-    else: # default top_right
+    elif pos == "top_right":
         overlay_expr = "main_w-overlay_w-25:25"
+    else:
+        overlay_expr = "(main_w-overlay_w)/2:(main_h-overlay_h)/2"
         
-    width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.22)
-    opacity = getattr(config, "WATERMARK_OPACITY", 0.75)
-    
     filter_complex = (
-        f"[1:v][0:v]scale2ref=w=main_w*{width_ratio}:h=-1[wm][base];"
-        f"[wm]format=rgba,colorchannelmixer=aa={opacity}[wm_tr];"
-        f"[base][wm_tr]overlay={overlay_expr}"
+        f"[1:v]scale={wm_w}:-2,format=rgba,colorchannelmixer=aa={opacity}[wm];"
+        f"[0:v][wm]overlay={overlay_expr}"
     )
     
     cmd = [
@@ -252,7 +262,7 @@ def apply_watermark_to_video(video_path: str) -> str:
     ]
     
     try:
-        res = subprocess.run(cmd, capture_output=True, timeout=120)
+        res = subprocess.run(cmd, capture_output=True, timeout=180)
         if res.returncode == 0 and os.path.exists(out_watermarked) and os.path.getsize(out_watermarked) > 0:
             try:
                 os.remove(video_path)
@@ -276,7 +286,7 @@ def apply_watermark_to_photo(photo_path: str) -> str:
         base = Image.open(photo_path)
         logo = Image.open(config.WATERMARK_FILE).convert("RGBA")
         
-        width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.22)
+        width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.45)
         opacity = getattr(config, "WATERMARK_OPACITY", 0.75)
         
         target_w = max(50, int(base.width * width_ratio))
@@ -287,15 +297,19 @@ def apply_watermark_to_photo(photo_path: str) -> str:
         a = a.point(lambda p: int(p * opacity))
         logo_resized.putalpha(a)
         
-        pos_setting = getattr(config, "WATERMARK_POSITION", "top_right").lower()
-        if pos_setting == "top_left":
+        pos_setting = getattr(config, "WATERMARK_POSITION", "center").lower()
+        if pos_setting == "center":
+            pos = ((base.width - target_w) // 2, (base.height - target_h) // 2)
+        elif pos_setting == "top_left":
             pos = (25, 25)
         elif pos_setting == "bottom_right":
             pos = (base.width - target_w - 25, base.height - target_h - 40)
         elif pos_setting == "bottom_left":
             pos = (25, base.height - target_h - 40)
-        else: # top_right
+        elif pos_setting == "top_right":
             pos = (base.width - target_w - 25, 25)
+        else:
+            pos = ((base.width - target_w) // 2, (base.height - target_h) // 2)
             
         base_rgba = base.convert("RGBA")
         base_rgba.paste(logo_resized, pos, logo_resized)
