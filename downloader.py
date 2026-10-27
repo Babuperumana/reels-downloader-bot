@@ -43,15 +43,43 @@ URL_REGEX = re.compile(
     re.IGNORECASE
 )
 
+def clean_url(url: str) -> str:
+    """Clean tracking and referral parameters from URLs."""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    
+    # Instagram: strip query params like ?utm_source=..., ?dlrf=...
+    if "instagram.com" in domain or "instagr.am" in domain:
+        match = re.search(r'/(reel|p|reels|tv)/([^/?&#]+)', parsed.path)
+        if match:
+            media_type, shortcode = match.groups()
+            if media_type == 'reels':
+                media_type = 'reel'
+            return f"https://www.instagram.com/{media_type}/{shortcode}/"
+            
+    # YouTube: strip tracking
+    elif "youtube.com" in domain or "youtu.be" in domain:
+        if "youtu.be" in domain:
+            video_id = parsed.path.lstrip('/')
+            return f"https://youtu.be/{video_id}"
+        elif "/shorts/" in parsed.path:
+            match = re.search(r'/shorts/([^/?&#]+)', parsed.path)
+            if match:
+                return f"https://www.youtube.com/shorts/{match.group(1)}"
+                
+    return url
+
 def extract_first_url(text: str) -> str | None:
-    """Extract first valid http/https URL from text."""
+    """Extract first valid http/https URL from text and clean tracking params."""
     if not text:
         return None
     match = URL_REGEX.search(text)
     if match:
         url = match.group(1).strip()
         url = url.rstrip(').,;!?\'"<>[]')
-        return url
+        return clean_url(url)
     return None
 
 def detect_platform(url: str) -> str:

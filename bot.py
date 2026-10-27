@@ -206,9 +206,13 @@ async def handle_url_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     except Exception as e:
         logger.error(f"Download failed for {url}: {e}", exc_info=True)
+        safe_err = html.escape(str(e))
+        if len(safe_err) > 200:
+            safe_err = safe_err[:200] + "..."
         error_msg = (
-            "❌ <b>വീഡിയോ ഡൗൺലോഡ് ചെയ്യാൻ സാധിച്ചില്ല!</b>\n\n"
-            "കാരണങ്ങൾ:\n"
+            "❌ <b>ഡൗൺലോഡ് ചെയ്യാൻ സാധിച്ചില്ല!</b>\n\n"
+            f"⚠️ <b>കാരണം:</b> <code>{safe_err}</code>\n\n"
+            "സാധ്യമായ കാരണങ്ങൾ:\n"
             "• അക്കൗണ്ട് പ്രൈവറ്റ് (Private) ആയിരിക്കാം.\n"
             "• ലിങ്ക് അസാധുവായതാകാം അല്ലെങ്കിൽ വീഡിയോ ഡിലീറ്റ് ചെയ്യപ്പെട്ടതാകാം.\n"
             "• ദയവായി ലിങ്ക് ശരിയാണോ എന്ന് പരിശോധിക്കുക."
