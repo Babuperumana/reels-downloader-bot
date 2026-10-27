@@ -455,10 +455,10 @@ def main():
     logger.info("Starting Reels Downloader Telegram Bot...")
 
     request = HTTPXRequest(
-        connect_timeout=20.0,
-        read_timeout=60.0,
-        write_timeout=60.0,
-        pool_timeout=20.0
+        connect_timeout=30.0,
+        read_timeout=300.0,
+        write_timeout=300.0,
+        pool_timeout=30.0
     )
 
     application = (

@@ -202,7 +202,7 @@ def compress_video_if_needed(video_path: str, max_bytes: int = config.MAX_FILESI
         "-i", video_path,
         "-c:v", "libx264",
         "-b:v", f"{video_bitrate}k",
-        "-preset", "veryfast",
+        "-preset", "ultrafast",
         "-c:a", "aac",
         "-b:a", "96k",
         compressed_path
@@ -257,7 +257,8 @@ def apply_watermark_to_video(video_path: str) -> str:
         "-filter_complex", filter_complex,
         "-c:a", "copy",
         "-c:v", "libx264",
-        "-preset", "veryfast",
+        "-preset", "ultrafast",
+        "-crf", "23",
         out_watermarked
     ]
     
@@ -271,6 +272,13 @@ def apply_watermark_to_video(video_path: str) -> str:
             return out_watermarked
         else:
             logger.warning(f"Watermark failed, keeping original: {res.stderr.decode('utf-8', errors='ignore')[:200]}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Watermark timed out after 180s, keeping original video: {video_path}")
+        if os.path.exists(out_watermarked):
+            try:
+                os.remove(out_watermarked)
+            except Exception:
+                pass
     except Exception as e:
         logger.warning(f"Error applying watermark to video: {e}")
         
@@ -360,12 +368,22 @@ def download_video(url: str) -> dict:
     # 2. General yt-dlp downloader
     out_template = str(config.DOWNLOAD_DIR / f"{platform.lower()}_{uid}_%(id)s.%(ext)s")
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best/all",
+        "format": (
+            "bestvideo[height<=1920][width<=1920][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=1920][width<=1920][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=1920][width<=1920]+bestaudio/"
+            "best[height<=1920][width<=1920][ext=mp4]/"
+            "best[height<=1920][width<=1920]/"
+            "best/all"
+        ),
         "merge_output_format": "mp4",
         "outtmpl": out_template,
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "socket_timeout": 30,
+        "retries": 10,
+        "fragment_retries": 10,
         "http_headers": {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -482,6 +500,9 @@ def download_audio(url: str, existing_video_path: str | None = None) -> dict:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "socket_timeout": 30,
+        "retries": 10,
+        "fragment_retries": 10,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
