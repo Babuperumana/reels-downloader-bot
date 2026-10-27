@@ -213,6 +213,104 @@ def compress_video_if_needed(video_path: str, max_bytes: int = config.MAX_FILESI
         return compressed_path
     return video_path
 
+def apply_watermark_to_video(video_path: str) -> str:
+    """Overlays transparent watermark logo onto video with automatic relative scaling."""
+    if not config.WATERMARK_ENABLED or not config.WATERMARK_FILE.exists():
+        return video_path
+        
+    out_watermarked = str(video_path).replace(".mp4", "_wm.mp4")
+    
+    pos = getattr(config, "WATERMARK_POSITION", "top_right").lower()
+    if pos == "top_left":
+        overlay_expr = "25:25"
+    elif pos == "bottom_right":
+        overlay_expr = "main_w-overlay_w-25:main_h-overlay_h-50"
+    elif pos == "bottom_left":
+        overlay_expr = "25:main_h-overlay_h-50"
+    else: # default top_right
+        overlay_expr = "main_w-overlay_w-25:25"
+        
+    width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.22)
+    opacity = getattr(config, "WATERMARK_OPACITY", 0.75)
+    
+    filter_complex = (
+        f"[1:v][0:v]scale2ref=w=main_w*{width_ratio}:h=-1[wm][base];"
+        f"[wm]format=rgba,colorchannelmixer=aa={opacity}[wm_tr];"
+        f"[base][wm_tr]overlay={overlay_expr}"
+    )
+    
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", video_path,
+        "-i", str(config.WATERMARK_FILE),
+        "-filter_complex", filter_complex,
+        "-c:a", "copy",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        out_watermarked
+    ]
+    
+    try:
+        res = subprocess.run(cmd, capture_output=True, timeout=120)
+        if res.returncode == 0 and os.path.exists(out_watermarked) and os.path.getsize(out_watermarked) > 0:
+            try:
+                os.remove(video_path)
+            except Exception:
+                pass
+            return out_watermarked
+        else:
+            logger.warning(f"Watermark failed, keeping original: {res.stderr.decode('utf-8', errors='ignore')[:200]}")
+    except Exception as e:
+        logger.warning(f"Error applying watermark to video: {e}")
+        
+    return video_path
+
+def apply_watermark_to_photo(photo_path: str) -> str:
+    """Overlays transparent watermark logo onto photo."""
+    if not config.WATERMARK_ENABLED or not config.WATERMARK_FILE.exists():
+        return photo_path
+        
+    try:
+        from PIL import Image
+        base = Image.open(photo_path)
+        logo = Image.open(config.WATERMARK_FILE).convert("RGBA")
+        
+        width_ratio = getattr(config, "WATERMARK_WIDTH_RATIO", 0.22)
+        opacity = getattr(config, "WATERMARK_OPACITY", 0.75)
+        
+        target_w = max(50, int(base.width * width_ratio))
+        target_h = int(logo.height * (target_w / logo.width))
+        logo_resized = logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        
+        r, g, b, a = logo_resized.split()
+        a = a.point(lambda p: int(p * opacity))
+        logo_resized.putalpha(a)
+        
+        pos_setting = getattr(config, "WATERMARK_POSITION", "top_right").lower()
+        if pos_setting == "top_left":
+            pos = (25, 25)
+        elif pos_setting == "bottom_right":
+            pos = (base.width - target_w - 25, base.height - target_h - 40)
+        elif pos_setting == "bottom_left":
+            pos = (25, base.height - target_h - 40)
+        else: # top_right
+            pos = (base.width - target_w - 25, 25)
+            
+        base_rgba = base.convert("RGBA")
+        base_rgba.paste(logo_resized, pos, logo_resized)
+        
+        ext = os.path.splitext(photo_path)[1].lower()
+        if ext in [".jpg", ".jpeg"]:
+            result = base_rgba.convert("RGB")
+            result.save(photo_path, quality=95)
+        else:
+            base_rgba.save(photo_path)
+    except Exception as e:
+        logger.warning(f"Error applying watermark to photo: {e}")
+        
+    return photo_path
+
 def download_video(url: str) -> dict:
     """
     Downloads reel/video/photo for Instagram, YouTube, Facebook, ShareChat.
@@ -226,6 +324,7 @@ def download_video(url: str) -> dict:
         thumb_path = str(config.DOWNLOAD_DIR / f"thumb_{uid}.jpg")
         try:
             info = download_sharechat_video(url, out_video)
+            out_video = apply_watermark_to_video(out_video)
             meta = get_media_metadata(out_video)
             duration = meta.get("duration") or info.get("duration", 0)
             generated_thumb = generate_thumbnail(out_video, thumb_path, info.get("thumbnail"))
@@ -292,6 +391,7 @@ def download_video(url: str) -> dict:
     is_photo = info_dict.get("is_photo") or file_ext in [".jpg", ".jpeg", ".png", ".webp"]
     
     if is_photo:
+        file_path = apply_watermark_to_photo(file_path)
         return {
             "type": "photo",
             "file_path": file_path,
@@ -301,6 +401,7 @@ def download_video(url: str) -> dict:
         }
 
     # Video post-processing
+    file_path = apply_watermark_to_video(file_path)
     thumb_path = str(config.DOWNLOAD_DIR / f"thumb_{uid}.jpg")
     meta = get_media_metadata(file_path)
     file_path = compress_video_if_needed(file_path)

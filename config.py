@@ -21,3 +21,10 @@ COOKIES_FILE = BASE_DIR / "cookies.txt"
 HAS_COOKIES = COOKIES_FILE.exists()
 
 AUTO_CLEANUP_HOURS = int(os.getenv("AUTO_CLEANUP_HOURS", "6"))
+
+# Watermark Settings
+WATERMARK_FILE = BASE_DIR / "assets" / "watermark.png"
+WATERMARK_ENABLED = os.getenv("WATERMARK_ENABLED", "True").lower() == "true"
+WATERMARK_POSITION = os.getenv("WATERMARK_POSITION", "top_right")
+WATERMARK_OPACITY = float(os.getenv("WATERMARK_OPACITY", "0.75"))
+WATERMARK_WIDTH_RATIO = float(os.getenv("WATERMARK_WIDTH_RATIO", "0.22"))

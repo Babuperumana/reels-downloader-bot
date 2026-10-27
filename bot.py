@@ -113,6 +113,47 @@ async def clean_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def watermark_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to toggle or configure video watermark."""
+    user_id = update.effective_user.id
+    if config.ADMIN_ID and user_id != config.ADMIN_ID:
+        await update.message.reply_text("⚠️ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അഡ്മിന് മാത്രമേ അധികാരമുള്ളൂ.")
+        return
+
+    args = context.args
+    if args:
+        sub = args[0].lower()
+        if sub in ["on", "enable", "true"]:
+            config.WATERMARK_ENABLED = True
+            await update.message.reply_text("✅ <b>വാട്ടർമാർക്ക് സജീവമാക്കി (Enabled).</b>", parse_mode=ParseMode.HTML)
+            return
+        elif sub in ["off", "disable", "false"]:
+            config.WATERMARK_ENABLED = False
+            await update.message.reply_text("❌ <b>വാട്ടർമാർക്ക് പ്രവർത്തനരഹിതമാക്കി (Disabled).</b>", parse_mode=ParseMode.HTML)
+            return
+        elif sub in ["top_right", "top_left", "bottom_right", "bottom_left"]:
+            config.WATERMARK_POSITION = sub
+            await update.message.reply_text(f"📍 <b>വാട്ടർമാർക്ക് സ്ഥാനം മാറ്റി:</b> <code>{sub}</code>", parse_mode=ParseMode.HTML)
+            return
+
+    status_str = "ഓൺ (Enabled) ✅" if config.WATERMARK_ENABLED else "ഓഫ് (Disabled) ❌"
+    msg = (
+        "🏷️ <b>വാട്ടർമാർക്ക് കോൺഫിഗറേഷൻ:</b>\n\n"
+        f"• സ്റ്റാറ്റസ്: <b>{status_str}</b>\n"
+        f"• സ്ഥാനം: <code>{config.WATERMARK_POSITION}</code>\n"
+        f"• സുതാര്യത (Opacity): <b>{int(config.WATERMARK_OPACITY * 100)}%</b>\n"
+        f"• ലോഗോ: <b>Babu Perumana (Transparent)</b>\n\n"
+        "<b>കമാൻഡുകൾ:</b>\n"
+        "• <code>/watermark on</code> - ഓൺ ചെയ്യാൻ\n"
+        "• <code>/watermark off</code> - ഓഫ് ചെയ്യാൻ\n"
+        "• <code>/watermark top_right</code> (മുകളിൽ വലതുവശം)\n"
+        "• <code>/watermark bottom_right</code> (താഴെ വലതുവശം)\n"
+        "• <code>/watermark top_left</code> (മുകളിൽ ഇടതുവശം)"
+    )
+    await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+
+
+
 
 async def audio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /audio or /mp3 command to download audio directly."""
@@ -429,6 +470,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler(["audio", "mp3"], audio_command))
     application.add_handler(CommandHandler("clean", clean_command))
+    application.add_handler(CommandHandler("watermark", watermark_command))
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url_message)
