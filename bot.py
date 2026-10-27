@@ -28,6 +28,8 @@ from downloader import (
     download_video,
     download_audio,
     cleanup_files,
+    auto_cleanup_downloads,
+    clear_all_downloads,
 )
 
 # Logging configuration
@@ -81,11 +83,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "   Instagram, ShareChat, Facebook, YouTube എന്നിവയിൽ നിന്നുള്ള ലിങ്ക് നേരിട്ട് അയക്കുക.\n\n"
         "2. <b>ഓഡിയോ (MP3) ലഭിക്കാൻ:</b>\n"
         "   വീഡിയോ ലഭിച്ച ശേഷം താഴെയുള്ള <code>🎵 MP3 ഡൗൺലോഡ് ചെയ്യുക</code> ബട്ടൺ ക്ലിക്ക് ചെയ്യുക, അല്ലെങ്കിൽ <code>/mp3 &lt;ലിങ്ക്&gt;</code> എന്ന് അയക്കുക.\n\n"
+        "3. <b>സ്റ്റോറേജ് ക്ലീൻ ചെയ്യാൻ:</b>\n"
+        "   സെർവറിലെ താൽക്കാലിക ഫയലുകൾ ഓരോ 6 മണിക്കൂറിലും തനിയെ നീക്കം ചെയ്യപ്പെടും. ഉടൻ തന്നെ ക്ലീൻ ചെയ്യാൻ: <code>/clean</code>\n\n"
         "⚠️ <b>ശ്രദ്ധിക്കുക:</b>\n"
         "• സ്വകാര്യ (Private) അക്കൗണ്ടുകളിൽ നിന്നുള്ള വീഡിയോകൾ ലഭിക്കില്ല.\n"
         "• വലിയ ഫയലുകൾ ടെലിഗ്രാമിന് അനുയോജ്യമായ രീതിയിൽ ഒപ്റ്റിമൈസ് ചെയ്യപ്പെടുന്നു."
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
+
+
+async def clean_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to clear all cached downloads immediately."""
+    user_id = update.effective_user.id
+    if config.ADMIN_ID and user_id != config.ADMIN_ID:
+        await update.message.reply_text("⚠️ ഈ കമാൻഡ് ഉപയോഗിക്കാൻ അഡ്മിന് മാത്രമേ അധികാരമുള്ളൂ.")
+        return
+
+    status_msg = await update.message.reply_text("🧹 <b>സ്റ്റോറേജ് ക്ലീൻ ചെയ്യുന്നു...</b>", parse_mode=ParseMode.HTML)
+    res = await asyncio.to_thread(clear_all_downloads)
+    MEDIA_CACHE.clear()
+    
+    mb_freed = res["bytes_freed"] / (1024 * 1024)
+    await status_msg.edit_text(
+        f"🧹 <b>സ്റ്റോറേജ് വിജയകരമായി ക്ലീൻ ചെയ്തു!</b>\n\n"
+        f"• നീക്കം ചെയ്ത ഫയലുകൾ: <b>{res['count']}</b>\n"
+        f"• ലഭ്യമാക്കിയ സ്ഥലം: <b>{mb_freed:.2f} MB</b>\n\n"
+        f"Raspberry Pi സെർവറിലെ എല്ലാ താൽക്കാലിക ഫയലുകളും നീക്കം ചെയ്തു.",
+        parse_mode=ParseMode.HTML
+    )
+
 
 
 async def audio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -335,18 +361,37 @@ async def process_audio_download(update: Update, context: ContextTypes.DEFAULT_T
         )
 
 
+async def periodic_cleanup_task():
+    """Background task to automatically delete downloads older than AUTO_CLEANUP_HOURS."""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Check every hour
+            res = await asyncio.to_thread(auto_cleanup_downloads, config.AUTO_CLEANUP_HOURS)
+            cleanup_old_cache(max_age_seconds=config.AUTO_CLEANUP_HOURS * 3600)
+            if res.get("count", 0) > 0:
+                logger.info(f"Periodic Cleanup: Deleted {res['count']} files older than {config.AUTO_CLEANUP_HOURS}h")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in periodic cleanup task: {e}")
+
+
 async def post_init(application: Application):
-    """Notify admin when bot comes online."""
+    """Notify admin when bot comes online and start background cleanup."""
+    # Launch background auto-cleanup task
+    asyncio.create_task(periodic_cleanup_task())
+
     if config.ADMIN_ID:
         try:
             bot_info = await application.bot.get_me()
             await application.bot.send_message(
                 chat_id=config.ADMIN_ID,
                 text=(
-                    f"🚀 <b>റീൽസ് ഡൗൺലോഡർ ബോട്ട് അപ്ഡേറ്റ് ചെയ്തു!</b>\n\n"
+                    f"🚀 <b>റീൽസ് ഡൗൺലോഡർ ബോട്ട് സജീവമായി!</b>\n\n"
                     f"🤖 ബോട്ട്: @{bot_info.username}\n"
-                    f"📅 സ്റ്റാറ്റസ്: ഓൺലൈൻ (Active)\n\n"
-                    f"ShareChat വീഡിയോ duration &amp; Malayalam encoding പരിഹരിച്ചു."
+                    f"📅 സ്റ്റാറ്റസ്: ഓൺലൈൻ (Active)\n"
+                    f"🧹 ഓട്ടോ-ക്ലീനർ: ഓരോ {config.AUTO_CLEANUP_HOURS} മണിക്കൂറിലും പഴയ ഫയലുകൾ തനിയെ നീക്കം ചെയ്യപ്പെടും.\n\n"
+                    f"മാനുവലായി ക്ലീൻ ചെയ്യാൻ: <code>/clean</code>"
                 ),
                 parse_mode=ParseMode.HTML
             )
@@ -383,6 +428,7 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler(["audio", "mp3"], audio_command))
+    application.add_handler(CommandHandler("clean", clean_command))
     application.add_handler(CallbackQueryHandler(handle_callback_query))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url_message)

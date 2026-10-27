@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import json
 import uuid
 import logging
@@ -418,3 +419,47 @@ def cleanup_files(*file_paths):
                 os.remove(p)
             except Exception as e:
                 logger.warning(f"Error removing file {p}: {e}")
+
+def auto_cleanup_downloads(max_age_hours: int = 6) -> dict:
+    """
+    Scans the downloads folder and deletes any files older than max_age_hours.
+    Returns dict with count and bytes freed.
+    """
+    now = time.time()
+    cutoff = now - (max_age_hours * 3600)
+    count = 0
+    bytes_freed = 0
+    
+    if config.DOWNLOAD_DIR.exists():
+        for f in config.DOWNLOAD_DIR.iterdir():
+            if f.is_file():
+                try:
+                    stat = f.stat()
+                    if stat.st_mtime < cutoff:
+                        bytes_freed += stat.st_size
+                        f.unlink(missing_ok=True)
+                        count += 1
+                except Exception as e:
+                    logger.warning(f"Error deleting old file {f}: {e}")
+                    
+    if count > 0:
+        logger.info(f"Auto-cleanup: Removed {count} old files, freed {bytes_freed / (1024*1024):.2f} MB")
+        
+    return {"count": count, "bytes_freed": bytes_freed}
+
+def clear_all_downloads() -> dict:
+    """Deletes ALL files in downloads directory (manual trigger)."""
+    count = 0
+    bytes_freed = 0
+    if config.DOWNLOAD_DIR.exists():
+        for f in config.DOWNLOAD_DIR.iterdir():
+            if f.is_file():
+                try:
+                    stat = f.stat()
+                    bytes_freed += stat.st_size
+                    f.unlink(missing_ok=True)
+                    count += 1
+                except Exception as e:
+                    logger.warning(f"Error removing {f}: {e}")
+    return {"count": count, "bytes_freed": bytes_freed}
+
