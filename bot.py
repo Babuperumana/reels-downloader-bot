@@ -125,9 +125,28 @@ async def handle_url_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             action=ChatAction.UPLOAD_VIDEO
         )
 
-        video_data = await asyncio.to_thread(download_video, url)
+        media_type = video_data.get("type", "video")
         file_path = video_data["file_path"]
-        title = video_data.get("title") or f"{platform} Video"
+        title = video_data.get("title") or f"{platform} Media"
+
+        if media_type == "photo":
+            safe_title = html.escape(title[:100])
+            caption = (
+                f"📸 <b>{safe_title}</b>\n\n"
+                f"📌 പ്ലാറ്റ്‌ഫോം: <b>{platform} Photo</b>\n"
+                "ℹ️ <i>ശ്രദ്ധിക്കുക: ഇതൊരു ഫോട്ടോ (Image) പോസ്റ്റ് ആണ്, അതിനാൽ ചിത്രം നൽകിയിരിക്കുന്നു!</i>"
+            )
+            await status_msg.edit_text("📤 <b>ഫോട്ടോ ടെലിഗ്രാമിലേക്ക് അപ്‌ലോഡ് ചെയ്യുന്നു...</b>", parse_mode=ParseMode.HTML)
+            with open(file_path, "rb") as photo_file:
+                await update.message.reply_photo(
+                    photo=photo_file,
+                    caption=caption,
+                    parse_mode=ParseMode.HTML
+                )
+            await status_msg.delete()
+            cleanup_files(file_path)
+            return
+
         duration = int(video_data.get("duration") or 0)
         width = video_data.get("width")
         height = video_data.get("height")

@@ -8,11 +8,35 @@ import requests
 from pathlib import Path
 from urllib.parse import urlparse
 import yt_dlp
+from yt_dlp.extractor.instagram import InstagramIE
 
 import config
 from sharechat import is_sharechat_url, download_sharechat_video
 
 logger = logging.getLogger(__name__)
+
+# Patch Instagram extractor to support photo posts seamlessly
+_orig_ig_extract_product = InstagramIE._extract_product
+
+def _custom_ig_extract_product(self, product_info, video_id, get_comments=False):
+    res = _orig_ig_extract_product(self, product_info, video_id, get_comments)
+    if not res.get("formats"):
+        thumbs = res.get("thumbnails", [])
+        if thumbs:
+            best_thumb = thumbs[-1]["url"]
+            res["formats"] = [{
+                "url": best_thumb,
+                "ext": "jpg",
+                "format_id": "photo",
+                "vcodec": "mjpeg",
+                "acodec": "none",
+                "width": thumbs[-1].get("width"),
+                "height": thumbs[-1].get("height"),
+            }]
+            res["is_photo"] = True
+    return res
+
+InstagramIE._extract_product = _custom_ig_extract_product
 
 URL_REGEX = re.compile(
     r'(https?://[^\s]+)',
@@ -162,7 +186,7 @@ def compress_video_if_needed(video_path: str, max_bytes: int = config.MAX_FILESI
 
 def download_video(url: str) -> dict:
     """
-    Downloads reel/video for Instagram, YouTube, Facebook, ShareChat.
+    Downloads reel/video/photo for Instagram, YouTube, Facebook, ShareChat.
     """
     platform = detect_platform(url)
     uid = uuid.uuid4().hex[:8]
@@ -178,6 +202,7 @@ def download_video(url: str) -> dict:
             generated_thumb = generate_thumbnail(out_video, thumb_path, info.get("thumbnail"))
             out_video = compress_video_if_needed(out_video)
             return {
+                "type": "video",
                 "file_path": out_video,
                 "title": info.get("title") or "ShareChat Reel",
                 "duration": duration,
@@ -193,7 +218,7 @@ def download_video(url: str) -> dict:
     # 2. General yt-dlp downloader
     out_template = str(config.DOWNLOAD_DIR / f"{platform.lower()}_{uid}_%(id)s.%(ext)s")
     ydl_opts = {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best/all",
         "merge_output_format": "mp4",
         "outtmpl": out_template,
         "noplaylist": True,
@@ -214,13 +239,13 @@ def download_video(url: str) -> dict:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=True)
         if not info_dict:
-            raise ValueError("No video information could be retrieved.")
+            raise ValueError("No media information could be retrieved.")
             
         if "entries" in info_dict and info_dict["entries"]:
             info_dict = info_dict["entries"][0]
             
         file_path = ydl.prepare_filename(info_dict)
-        base, _ = os.path.splitext(file_path)
+        base, ext = os.path.splitext(file_path)
         if os.path.exists(f"{base}.mp4"):
             file_path = f"{base}.mp4"
             
@@ -231,6 +256,22 @@ def download_video(url: str) -> dict:
             else:
                 raise FileNotFoundError(f"Downloaded file not found for {url}")
 
+    title = info_dict.get("title") or f"{platform} Media"
+    
+    # Check if downloaded media is a photo
+    file_ext = os.path.splitext(file_path)[1].lower()
+    is_photo = info_dict.get("is_photo") or file_ext in [".jpg", ".jpeg", ".png", ".webp"]
+    
+    if is_photo:
+        return {
+            "type": "photo",
+            "file_path": file_path,
+            "title": title,
+            "platform": platform,
+            "file_size": os.path.getsize(file_path)
+        }
+
+    # Video post-processing
     thumb_path = str(config.DOWNLOAD_DIR / f"thumb_{uid}.jpg")
     meta = get_media_metadata(file_path)
     file_path = compress_video_if_needed(file_path)
@@ -242,10 +283,9 @@ def download_video(url: str) -> dict:
     width = meta.get("width") or info_dict.get("width")
     height = meta.get("height") or info_dict.get("height")
     generated_thumb = generate_thumbnail(file_path, thumb_path, info_dict.get("thumbnail"))
-    
-    title = info_dict.get("title") or f"{platform} Video"
 
     return {
+        "type": "video",
         "file_path": file_path,
         "title": title,
         "duration": duration,
