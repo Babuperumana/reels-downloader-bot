@@ -369,6 +369,11 @@ def download_video(url: str) -> dict:
     out_template = str(config.DOWNLOAD_DIR / f"{platform.lower()}_{uid}_%(id)s.%(ext)s")
     ydl_opts = {
         "format": (
+            "bestvideo[height<=1280][width<=1280][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=1280][width<=1280][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=1280][width<=1280]+bestaudio/"
+            "best[height<=1280][width<=1280][ext=mp4]/"
+            "best[height<=1280][width<=1280]/"
             "bestvideo[height<=1920][width<=1920][vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo[height<=1920][width<=1920][ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo[height<=1920][width<=1920]+bestaudio/"

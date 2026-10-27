@@ -212,7 +212,9 @@ async def handle_url_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await update.message.reply_photo(
                     photo=photo_file,
                     caption=caption,
-                    parse_mode=ParseMode.HTML
+                    parse_mode=ParseMode.HTML,
+                    write_timeout=120.0,
+                    read_timeout=120.0
                 )
             await status_msg.delete()
             cleanup_files(file_path)
@@ -265,7 +267,9 @@ async def handle_url_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     height=height,
                     thumbnail=thumb_file,
                     supports_streaming=True,
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
+                    write_timeout=300.0,
+                    read_timeout=300.0
                 )
         finally:
             if thumb_file:
@@ -348,7 +352,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 performer=platform,
                 duration=duration if duration > 0 else None,
                 caption=f"🎵 <b>{safe_title}</b>\n📌 പ്ലാറ്റ്‌ഫോം: <b>{platform}</b>",
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
+                write_timeout=180.0,
+                read_timeout=180.0
             )
 
         await status_msg.delete()
@@ -391,7 +397,9 @@ async def process_audio_download(update: Update, context: ContextTypes.DEFAULT_T
                 performer=platform,
                 duration=duration if duration > 0 else None,
                 caption=f"🎵 <b>{safe_title}</b>\n📌 പ്ലാറ്റ്‌ഫോം: <b>{platform}</b>",
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
+                write_timeout=180.0,
+                read_timeout=180.0
             )
 
         await status_msg.delete()
